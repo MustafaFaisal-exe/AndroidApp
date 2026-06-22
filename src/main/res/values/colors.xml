@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette -->
+    <color name="colorBg">#0A0A10</color>
+    <color name="colorSurface">#12121C</color>
+    <color name="colorSurfaceAlpha">#CC0D1117</color>
+    <color name="colorPrimary">#00D4AA</color>
+    <color name="colorPrimaryDark">#008F72</color>
+    <color name="colorAccent">#00FF88</color>
+    <color name="colorText">#E8E8F0</color>
+    <color name="colorTextMuted">#8888AA</color>
+    <!-- Detection labels -->
+    <color name="colorFront">#00E676</color>
+    <color name="colorRear">#FF3355</color>
+    <!-- Toggle states -->
+    <color name="colorToggleActive">#00D4AA</color>
+    <color name="colorToggleInactive">#1E1E2E</color>
+    <color name="colorToggleActiveText">#000000</color>
+    <color name="colorToggleInactiveText">#AAAACC</color>
+    <!-- Status -->
+    <color name="colorStatusOk">#00E676</color>
+    <color name="colorStatusWarn">#FFB300</color>
+    <color name="colorStatusError">#FF3355</color>
+    <!-- HUD panel -->
+    <color name="colorHudBg">#B3000000</color>
+    <color name="colorDivider">#33FFFFFF</color>
+</resources>

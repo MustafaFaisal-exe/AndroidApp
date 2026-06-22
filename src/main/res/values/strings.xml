@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TruckVision AI</string>
+    <string name="mode_raw">Raw</string>
+    <string name="mode_bc">BC</string>
+    <string name="mode_pipeline">Pipeline</string>
+    <string name="overlay_none">None</string>
+    <string name="overlay_yolo">YOLO</string>
+    <string name="overlay_custom">Custom</string>
+    <string name="base_label">BASE</string>
+    <string name="overlay_label">OVERLAY</string>
+    <string name="status_loading">Loading model…</string>
+    <string name="status_ready">Model ready</string>
+    <string name="status_error">Model error</string>
+    <string name="camera_permission_denied">Camera permission required</string>
+</resources>

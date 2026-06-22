@@ -1,0 +1,377 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBg">
+
+    <!-- ═══════════════════════════════════════════════════════════
+         CAMERA PREVIEW — fills full screen
+         ═══════════════════════════════════════════════════════════ -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:scaleType="fillCenter" />
+
+    <!-- PROCESSED FRAME — shown instead of preview when active -->
+    <ImageView
+        android:id="@+id/processedView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:scaleType="fitCenter"
+        android:visibility="gone"
+        android:background="#000000" />
+
+    <!-- ═══════════════════════════════════════════════════════════
+         TOP HUD — app title, mode badge, FPS
+         ═══════════════════════════════════════════════════════════ -->
+    <LinearLayout
+        android:id="@+id/topHud"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="48dp"
+        android:paddingBottom="14dp"
+        android:background="@color/colorHudBg"
+        android:gravity="center_vertical"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- App icon dot + title -->
+        <View
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:background="@drawable/dot_accent"
+            android:layout_marginEnd="10dp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="TruckVision AI"
+            android:textColor="@color/colorText"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:layout_weight="1" />
+
+        <!-- Active mode badge -->
+        <TextView
+            android:id="@+id/modeBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="raw+none"
+            android:textColor="@color/colorPrimary"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:background="@drawable/badge_bg"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:layout_marginEnd="12dp" />
+
+        <!-- FPS counter -->
+        <TextView
+            android:id="@+id/fpsText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="-- fps"
+            android:textColor="@color/colorAccent"
+            android:textSize="13sp"
+            android:fontFamily="monospace" />
+
+    </LinearLayout>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         BOTTOM CONTROL PANEL
+         ═══════════════════════════════════════════════════════════ -->
+    <LinearLayout
+        android:id="@+id/bottomPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/colorHudBg"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="32dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Divider line at top of panel -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="3dp"
+            android:background="@color/colorDivider"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="14dp" />
+
+        <!-- ─── BASE MODE ROW ─── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:text="BASE"
+                android:textColor="@color/colorTextMuted"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15"
+                android:layout_width="64dp"
+                android:layout_height="wrap_content" />
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/baseModeGroup"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRaw"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="Raw"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorText"
+                    app:strokeColor="@color/colorDivider" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnBC"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="BC"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorText"
+                    app:strokeColor="@color/colorDivider" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPipeline"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="Pipeline"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorText"
+                    app:strokeColor="@color/colorDivider" />
+
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+        </LinearLayout>
+
+        <!-- ─── DENOISE MODE ROW ─── -->
+        <LinearLayout
+            android:id="@+id/denoiseRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="10dp"
+            android:visibility="gone">
+
+            <TextView
+                android:text="DENOISE"
+                android:textColor="@color/colorTextMuted"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15"
+                android:layout_width="64dp"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:text="Box Blur Active"
+                android:textColor="@color/colorText"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- ─── OVERLAY MODE ROW ─── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="14dp">
+
+            <TextView
+                android:text="OVERLAY"
+                android:textColor="@color/colorTextMuted"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15"
+                android:layout_width="64dp"
+                android:layout_height="wrap_content" />
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/overlayModeGroup"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnNone"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="None"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorText"
+                    app:strokeColor="@color/colorDivider" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnYolo"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="YOLO"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorText"
+                    app:strokeColor="@color/colorDivider" />
+
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+        </LinearLayout>
+
+        <!-- ─── BRIGHTNESS SLIDER ─── -->
+        <LinearLayout
+            android:id="@+id/brightnessRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:text="BRIGHT"
+                android:textColor="@color/colorTextMuted"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15"
+                android:layout_width="64dp"
+                android:layout_height="wrap_content" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/brightnessSlider"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:valueFrom="-10.0"
+                android:valueTo="10.0"
+                android:stepSize="1.0"
+                android:value="0.0"
+                app:labelBehavior="gone"
+                app:thumbRadius="8dp"
+                app:trackHeight="4dp" />
+
+            <TextView
+                android:id="@+id/brightnessValue"
+                android:text="0"
+                android:textColor="@color/colorText"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:layout_width="32dp"
+                android:layout_height="wrap_content"
+                android:gravity="end" />
+        </LinearLayout>
+
+        <!-- ─── CONTRAST SLIDER ─── -->
+        <LinearLayout
+            android:id="@+id/contrastRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="14dp"
+            android:visibility="gone">
+
+            <TextView
+                android:text="CONTRAST"
+                android:textColor="@color/colorTextMuted"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15"
+                android:layout_width="64dp"
+                android:layout_height="wrap_content" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/contrastSlider"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:valueFrom="1.0"
+                android:valueTo="2.0"
+                android:stepSize="0.1"
+                android:value="1.0"
+                app:labelBehavior="gone"
+                app:thumbRadius="8dp"
+                app:trackHeight="4dp" />
+
+            <TextView
+                android:id="@+id/contrastValue"
+                android:text="1.0"
+                android:textColor="@color/colorText"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:layout_width="32dp"
+                android:layout_height="wrap_content"
+                android:gravity="end" />
+        </LinearLayout>
+
+        <!-- ─── STATUS BAR ─── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Status dot -->
+            <View
+                android:id="@+id/statusDot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/dot_status"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="Ready"
+                android:textColor="@color/colorTextMuted"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:layout_weight="1" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

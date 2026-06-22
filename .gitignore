@@ -1,0 +1,26 @@
+# Build folders
+/build
+*/build
+
+# Local config
+local.properties
+
+# Gradle cache
+.gradle/
+.caches/
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Android Studio
+*.hprof
+
+# Keystore files (VERY IMPORTANT)
+*.jks
+*.keystore
+
+# Logs
+*.log
