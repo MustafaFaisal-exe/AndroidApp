@@ -80,8 +80,11 @@ object ImageProcessor {
     }
 
     fun matToBitmap(mat: Mat): Bitmap {
-        val bmp = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888)
-        Utils.matToBitmap(mat, bmp)
+        val rgba = Mat()
+        Imgproc.cvtColor(mat, rgba, Imgproc.COLOR_BGR2RGBA)
+        val bmp = Bitmap.createBitmap(rgba.cols(), rgba.rows(), Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(rgba, bmp)
+        rgba.release()
         return bmp
     }
 
