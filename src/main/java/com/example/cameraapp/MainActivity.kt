@@ -60,6 +60,11 @@ class MainActivity : AppCompatActivity() {
     private var imageAnalysis: ImageAnalysis? = null
     private var camera: Camera? = null
 
+    // Persistent buffers to avoid GC pressure
+    private var rgbaMatCached: Mat? = null
+    private var rawFrameCached: Mat? = null
+    private var rotatedFrameCached: Mat? = null
+
     // ─── FPS tracking ────────────────────────────────────────────────
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -96,6 +101,9 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
         frameProcessor.close()
+        rgbaMatCached?.release()
+        rawFrameCached?.release()
+        rotatedFrameCached?.release()
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -325,31 +333,42 @@ class MainActivity : AppCompatActivity() {
 
             val rotationDegrees = proxy.imageInfo.rotationDegrees
             val rgbaMat = imageProxyToRgbaMat(proxy)
-            val rawFrame = Mat()
+            
+            val rawFrame = rawFrameCached?.takeIf { it.rows() == rgbaMat.rows() && it.cols() == rgbaMat.cols() }
+                ?: Mat(rgbaMat.rows(), rgbaMat.cols(), CvType.CV_8UC3).also { rawFrameCached = it }
+                
             Imgproc.cvtColor(rgbaMat, rawFrame, Imgproc.COLOR_RGBA2BGR)
-            rgbaMat.release()
 
             val frame = if (rotationDegrees != 0) {
-                val rotated = Mat()
+                val rotated = rotatedFrameCached?.let { 
+                    if (rotationDegrees % 180 == 0) {
+                        if (it.rows() == rawFrame.rows() && it.cols() == rawFrame.cols()) it else null
+                    } else {
+                        if (it.rows() == rawFrame.cols() && it.cols() == rawFrame.rows()) it else null
+                    }
+                } ?: Mat().also { rotatedFrameCached = it }
+                
                 when (rotationDegrees) {
                     90  -> Core.rotate(rawFrame, rotated, Core.ROTATE_90_CLOCKWISE)
                     180 -> Core.rotate(rawFrame, rotated, Core.ROTATE_180)
                     270 -> Core.rotate(rawFrame, rotated, Core.ROTATE_90_COUNTERCLOCKWISE)
-                    else -> rawFrame.copyTo(rotated).let { rotated }
+                    else -> rawFrame.copyTo(rotated)
                 }
-                rawFrame.release(); rotated
+                rotated
             } else rawFrame
 
             val result = frameProcessor.process(frame, currentBase, currentOverlay)
+            val sourceW = result.cols()
+            val sourceH = result.rows()
 
             if (currentOverlay == "yolo") {
-                val sourceW = result.cols()
-                val sourceH = result.rows()
                 val boxes = frameProcessor.yolo.lastBoxes
-
                 val outBitmap = ImageProcessor.matToBitmap(result)
-                if (result !== frame) result.release()
-                frame.release()
+                
+                // Only release if it's a new Mat from processor, not our persistent buffers
+                if (result !== frame && result !== rawFrame && result !== rotatedFrameCached) {
+                    result.release()
+                }
 
                 mainHandler.post {
                     detectionOverlay.setDetections(
@@ -368,8 +387,9 @@ class MainActivity : AppCompatActivity() {
             }
 
             val outBitmap = ImageProcessor.matToBitmap(result)
-            if (result !== frame) result.release()
-            frame.release()
+            if (result !== frame && result !== rawFrame && result !== rotatedFrameCached) {
+                result.release()
+            }
 
             mainHandler.post {
                 detectionOverlay.setDetections(emptyList(), 1, 1, BoxCoordinateMapper.ScaleType.FIT_CENTER)
@@ -422,14 +442,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun imageProxyToRgbaMat(proxy: ImageProxy): Mat {
+        val width       = proxy.width
+        val height      = proxy.height
+        val rgba        = rgbaMatCached?.takeIf { it.rows() == height && it.cols() == width }
+            ?: Mat(height, width, CvType.CV_8UC4).also { rgbaMatCached = it }
+            
         val plane       = proxy.planes[0]
         val buffer      = plane.buffer
         buffer.rewind()
-        val width       = proxy.width
-        val height      = proxy.height
         val rowStride   = plane.rowStride
         val pixelStride = plane.pixelStride
-        val rgba        = Mat(height, width, CvType.CV_8UC4)
 
         if (pixelStride == 4 && rowStride == width * 4) {
             val expected = width * height * 4

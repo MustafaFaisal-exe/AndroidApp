@@ -69,6 +69,9 @@ class YoloDetector(private val context: Context) {
     private var inputSize = DEFAULT_INPUT_SIZE
     private var letterboxBuf: Mat? = null
     private var tensorBuf: FloatBuffer? = null
+    private val rgbBuf = Mat()
+    private val floatBuf = Mat()
+    private val channels = mutableListOf<Mat>()
 
     fun loadAsync(onReady: () -> Unit = {}) {
         if (status == Status.LOADING || status == Status.READY) return
@@ -100,6 +103,10 @@ class YoloDetector(private val context: Context) {
         session?.close(); session = null
         env?.close(); env = null
         letterboxBuf?.release(); letterboxBuf = null
+        rgbBuf.release()
+        floatBuf.release()
+        channels.forEach { it.release() }
+        channels.clear()
         status = Status.IDLE
     }
 
@@ -413,25 +420,21 @@ class YoloDetector(private val context: Context) {
     }
 
     private fun matToTensor(mat: Mat, inputName: String): Map<String, OnnxTensor> {
-        val rgb = Mat()
-        Imgproc.cvtColor(mat, rgb, Imgproc.COLOR_BGR2RGB)
-        val floatMat = Mat()
-        rgb.convertTo(floatMat, CvType.CV_32FC3, 1.0 / 255.0)
-        rgb.release()
+        Imgproc.cvtColor(mat, rgbBuf, Imgproc.COLOR_BGR2RGB)
+        rgbBuf.convertTo(floatBuf, CvType.CV_32FC3, 1.0 / 255.0)
 
         val buf = tensorBuf?.takeIf { it.capacity() == 3 * inputSize * inputSize }
             ?: FloatBuffer.allocate(3 * inputSize * inputSize).also { tensorBuf = it }
         buf.clear()
 
-        val channels = mutableListOf<Mat>()
-        Core.split(floatMat, channels)
-        floatMat.release()
+        channels.forEach { it.release() }
+        channels.clear()
+        Core.split(floatBuf, channels)
 
         val floatArray = FloatArray(inputSize * inputSize)
         for (ch in channels) {
             ch.get(0, 0, floatArray)
             buf.put(floatArray)
-            ch.release()
         }
         buf.rewind()
 
