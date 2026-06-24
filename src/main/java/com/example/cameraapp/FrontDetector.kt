@@ -58,8 +58,8 @@ object FrontDetector {
             if      (redMax > 0.50 && redDiff > 0.20) score -= 5
             else if (redMax > 0.35 && redDiff > 0.20) score -= 4
             else if (redMax > 0.25 && redDiff > 0.15) score -= 3
-            else if (redMax > 0.14 && redDiff > 0.06) score -= 3  // ← was -1, now -3; catches symmetric tail lights
-            else if (redMax > 0.14)                   score -= 2  // ← was -1
+            else if (redMax > 0.14 && redDiff > 0.06) score -= 3
+            else if (redMax > 0.14)                   score -= 2
 
             // ── Signal 1: Top strip relative brightness ───────────────────────────────
             val topRel = regionMean(gray, 0.00, 0.12, 0.10, 0.90) - cropMean
