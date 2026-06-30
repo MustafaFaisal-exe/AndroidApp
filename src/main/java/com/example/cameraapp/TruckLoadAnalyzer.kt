@@ -72,14 +72,9 @@ class TruckLoadAnalyzer(
             }
         }
 
-        // 2. Crop Mat and convert to Bitmap for Depth model
-        val roi = org.opencv.core.Rect(cropRect.left, cropRect.top, cropRect.width(), cropRect.height())
-        val croppedMat = Mat(frame, roi)
-        val croppedBitmap = ImageProcessor.matToBitmap(croppedMat)
-        croppedMat.release()
-        
-        // 3. Depth Estimation
-        val depthResult = depthEstimator.estimate(croppedBitmap) ?: run {
+        // 2. Run Depth Estimation on the WHOLE frame
+        val fullBitmap = ImageProcessor.matToBitmap(frame)
+        val depthResult = depthEstimator.estimate(fullBitmap) ?: run {
             val statusMsg = when (depthEstimator.status) {
                 DepthEstimator.Status.ERROR -> "Depth Model ERROR"
                 DepthEstimator.Status.LOADING -> "Depth Loading..."
@@ -88,19 +83,27 @@ class TruckLoadAnalyzer(
             return TruckAnalysisResult(statusMsg, false, 0f, 0f, 0f, cropRect, source, null)
         }
         
-        // 4. Classification
-        val isFull = classifyLoad(depthResult.depthMean, depthThreshold)
+        // 3. Crop Depth Map using YOLO box
+        val regionResult = depthEstimator.cropDepthMap(
+            depthResult,
+            cropRect,
+            frame.cols(),
+            frame.rows()
+        )
+        
+        // 4. Classification based on regional mean
+        val isFull = classifyLoad(regionResult.mean, depthThreshold)
         val status = if (isFull) "FULL" else "EMPTY"
         
         return TruckAnalysisResult(
             status = status,
             isFull = isFull,
-            depthMean = depthResult.depthMean,
-            depthDiff = depthResult.depthDiff,
-            depthStd = depthResult.depthStd,
+            depthMean = regionResult.mean,
+            depthDiff = regionResult.diff,
+            depthStd = regionResult.std,
             cropRect = cropRect,
             source = source,
-            depthMapBitmap = depthResult.heatmap
+            depthMapBitmap = regionResult.heatmap
         )
     }
 }

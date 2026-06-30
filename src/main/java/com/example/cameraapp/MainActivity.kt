@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
     private var marginRight = 80
     private var marginTop = 80
     private var marginBottom = 80
-    private var meanThreshold = 160f
+    private var meanThreshold = 120f
 
     // ─── Camera / processing ─────────────────────────────────────────
     private lateinit var cameraExecutor: ExecutorService
@@ -469,7 +469,7 @@ class MainActivity : AppCompatActivity() {
         
         updateUiForState(CaptureState.ANALYZING)
         
-        // Freeze frame
+        // Freeze-frame
         val frozenBitmap = ImageProcessor.matToBitmap(frame)
         val frameCopy = frame.clone()
 

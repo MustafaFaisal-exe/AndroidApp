@@ -4,8 +4,8 @@ import android.graphics.RectF
 import kotlin.math.sqrt
 
 class StabilityTracker(
-    private val windowSize: Int = 1,
-    private val stableFrameThreshold: Int = 1,
+    private val windowSize: Int = 5,
+    private val stableFrameThreshold: Int = 2,
     private val minConfidence: Float = 0.05f,
     private val maxConfStdDev: Float = 0.05f,
     private val maxDriftPixels: Float = 30f

@@ -147,12 +147,60 @@ class DepthEstimator(private val context: Context) {
         }
         
         // Calculate stats on the normalized [0, 255] map to match Python logic
-        val mean = normalized.average().toFloat()
         val std = calculateStd(normalized)
-        val heatmap = createHeatmap(normalized, inputSize, inputSize, bitmap.width, bitmap.height)
+        val mean = normalized.average().toFloat()
+        val heatmap = createHeatmap(normalized, rows, cols, bitmap.width, bitmap.height)
         
-        return DepthResult(normalized, mean, diff, std, heatmap)
+        return DepthResult(normalized, mean, diff, std, heatmap, rows, cols)
     }
+
+    fun cropDepthMap(
+        result: DepthResult,
+        sourceRect: android.graphics.Rect,
+        sourceWidth: Int,
+        sourceHeight: Int
+    ): RegionResult {
+        val rows = result.rows
+        val cols = result.cols
+        
+        val x1 = (sourceRect.left.toFloat() / sourceWidth * cols).toInt().coerceIn(0, cols - 1)
+        val y1 = (sourceRect.top.toFloat() / sourceHeight * rows).toInt().coerceIn(0, rows - 1)
+        val x2 = (sourceRect.right.toFloat() / sourceWidth * cols).toInt().coerceIn(x1 + 1, cols)
+        val y2 = (sourceRect.bottom.toFloat() / sourceHeight * rows).toInt().coerceIn(y1 + 1, rows)
+        
+        val croppedWidth = x2 - x1
+        val croppedHeight = y2 - y1
+        val croppedData = FloatArray(croppedWidth * croppedHeight)
+        
+        var sum = 0f
+        var min = Float.MAX_VALUE
+        var max = -Float.MAX_VALUE
+        for (y in 0 until croppedHeight) {
+            for (x in 0 until croppedWidth) {
+                val value = result.depthMap[(y1 + y) * cols + (x1 + x)]
+                croppedData[y * croppedWidth + x] = value
+                sum += value
+                if (value < min) min = value
+                if (value > max) max = value
+            }
+        }
+        
+        val mean = if (croppedData.isNotEmpty()) sum / croppedData.size else 0f
+        val diff = if (croppedData.isNotEmpty()) max - min else 0f
+        val std = calculateStd(croppedData)
+        
+        // Generate heatmap for the cropped region
+        val heatmap = createHeatmap(croppedData, croppedHeight, croppedWidth, sourceRect.width(), sourceRect.height())
+        
+        return RegionResult(mean, diff, std, heatmap)
+    }
+
+    data class RegionResult(
+        val mean: Float,
+        val diff: Float,
+        val std: Float,
+        val heatmap: Bitmap
+    )
 
     private fun calculateStd(data: FloatArray): Float {
         if (data.isEmpty()) return 0f
@@ -246,6 +294,8 @@ class DepthEstimator(private val context: Context) {
         val depthMean: Float,
         val depthDiff: Float,
         val depthStd: Float,
-        val heatmap: Bitmap
+        val heatmap: Bitmap,
+        val rows: Int,
+        val cols: Int
     )
 }
