@@ -10,30 +10,27 @@ class FrameProcessor(context: Context) {
     var contrast: Double = 1.0
 
     companion object {
-        val VALID_BASES = setOf("raw", "bc", "pipeline")
-        val VALID_OVERLAYS = setOf("none", "yolo")
+        val VALID_BASES = setOf("bc", "pipeline")
+        val VALID_OVERLAYS = setOf("yolo")
     }
 
     fun process(frame: Mat, base: String, overlay: String): Mat {
         val based = applyBase(frame, base)
         val result = applyOverlay(based, overlay)
-        if (base != "raw" || overlay != "none") {
-            if (result !== based) based.release()
-        }
+        if (result !== based) based.release()
         return result
     }
 
     fun process(frame: Mat, mode: String): Mat {
         val parts = mode.split("+", limit = 2)
-        val base    = parts.getOrElse(0) { "raw" }.let { if (it in VALID_BASES)    it else "raw" }
-        val overlay = parts.getOrElse(1) { "none" }.let { if (it in VALID_OVERLAYS) it else "none" }
+        val base    = parts.getOrElse(0) { "bc" }.let { if (it in VALID_BASES)    it else "bc" }
+        val overlay = parts.getOrElse(1) { "yolo" }.let { if (it in VALID_OVERLAYS) it else "yolo" }
         return process(frame, base, overlay)
     }
 
     private fun applyBase(frame: Mat, base: String): Mat = when (base) {
-        "bc" -> ImageProcessor.preprocessBC(frame, brightness = brightness, contrast = contrast)
         "pipeline" -> ImageProcessor.preprocess(frame)
-        else -> frame
+        else -> ImageProcessor.preprocessBC(frame, brightness = brightness, contrast = contrast)
     }
 
     private fun applyOverlay(frame: Mat, overlay: String): Mat {

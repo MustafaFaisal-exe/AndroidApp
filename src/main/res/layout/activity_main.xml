@@ -175,17 +175,6 @@
                 app:selectionRequired="true">
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnRaw"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_weight="1"
-                    android:text="Raw"
-                    android:textSize="12sp"
-                    android:textColor="@color/colorText"
-                    app:strokeColor="@color/colorDivider" />
-
-                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnBC"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
@@ -236,56 +225,6 @@
                 android:fontFamily="monospace"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <!-- ─── OVERLAY MODE ROW ─── -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="14dp">
-
-            <TextView
-                android:text="OVERLAY"
-                android:textColor="@color/colorTextMuted"
-                android:textSize="10sp"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.15"
-                android:layout_width="64dp"
-                android:layout_height="wrap_content" />
-
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/overlayModeGroup"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                app:singleSelection="true"
-                app:selectionRequired="true">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnNone"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_weight="1"
-                    android:text="None"
-                    android:textSize="12sp"
-                    android:textColor="@color/colorText"
-                    app:strokeColor="@color/colorDivider" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnYolo"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_weight="1"
-                    android:text="YOLO"
-                    android:textSize="12sp"
-                    android:textColor="@color/colorText"
-                    app:strokeColor="@color/colorDivider" />
-
-            </com.google.android.material.button.MaterialButtonToggleGroup>
         </LinearLayout>
 
         <!-- ─── BRIGHTNESS SLIDER ─── -->

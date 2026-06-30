@@ -38,7 +38,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var statusDot: android.view.View
     private lateinit var baseModeGroup: MaterialButtonToggleGroup
-    private lateinit var overlayModeGroup: MaterialButtonToggleGroup
     private lateinit var denoiseRow: android.view.View
     private lateinit var brightnessRow: android.view.View
     private lateinit var contrastRow: android.view.View
@@ -49,8 +48,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var truckConfidenceText: TextView
 
     // ─── State ───────────────────────────────────────────────────────
-    private var currentBase    = "raw"
-    private var currentOverlay = "none"
+    private var currentBase    = "bc"
+    private var currentOverlay = "yolo"
     private val processing     = AtomicBoolean(false)
 
     // ─── Camera / processing ─────────────────────────────────────────
@@ -89,10 +88,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         bindViews()
-        setupModeToggles()
-
+        
         cameraExecutor = Executors.newSingleThreadExecutor()
         frameProcessor = FrameProcessor(this)
+        
+        setupModeToggles()
 
         requestCameraPermission()
     }
@@ -119,7 +119,6 @@ class MainActivity : AppCompatActivity() {
         statusText       = findViewById(R.id.statusText)
         statusDot        = findViewById(R.id.statusDot)
         baseModeGroup    = findViewById(R.id.baseModeGroup)
-        overlayModeGroup = findViewById(R.id.overlayModeGroup)
         denoiseRow       = findViewById(R.id.denoiseRow)
         brightnessRow    = findViewById(R.id.brightnessRow)
         contrastRow      = findViewById(R.id.contrastRow)
@@ -135,29 +134,19 @@ class MainActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────
 
     private fun setupModeToggles() {
-        baseModeGroup.check(R.id.btnRaw)
-        overlayModeGroup.check(R.id.btnNone)
+        baseModeGroup.check(R.id.btnBC)
 
         baseModeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
             currentBase = when (checkedId) {
-                R.id.btnBC       -> "bc"
                 R.id.btnPipeline -> "pipeline"
-                else             -> "raw"
-            }
-            onModeChanged()
-        }
-
-        overlayModeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
-            currentOverlay = when (checkedId) {
-                R.id.btnYolo -> "yolo"
-                else         -> "none"
+                else             -> "bc"
             }
             onModeChanged()
         }
 
         setupSliders()
+        onModeChanged() // Initialize state
     }
 
     private fun setupSliders() {
@@ -199,7 +188,7 @@ class MainActivity : AppCompatActivity() {
         val mode = "$currentBase+$currentOverlay"
         modeBadge.text = mode
 
-        if (currentOverlay == "yolo" && !frameProcessor.yolo.isReady()) {
+        if (!frameProcessor.yolo.isReady()) {
             setStatus("Loading YOLO…", StatusLevel.WARN)
             frameProcessor.yolo.loadAsync {
                 mainHandler.post {
@@ -210,21 +199,16 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-        } else if (currentOverlay != "yolo") {
+        } else {
             setStatus("Mode: $mode", StatusLevel.OK)
         }
 
-        val showProcessed = currentBase != "raw"
-        val showYolo = currentOverlay == "yolo"
-
         previewView.visibility = android.view.View.VISIBLE
-        processedView.visibility = if (showProcessed) android.view.View.VISIBLE else android.view.View.GONE
+        processedView.visibility = android.view.View.VISIBLE
         processedView.scaleType = ImageView.ScaleType.FIT_CENTER
         processedView.setBackgroundColor(android.graphics.Color.BLACK)
-        detectionOverlay.visibility = if (showYolo) android.view.View.VISIBLE else android.view.View.GONE
-        detectionOverlay.clear()
-        if (!showYolo) truckConfidenceText.text = ""
-
+        detectionOverlay.visibility = android.view.View.VISIBLE
+        
         denoiseRow.visibility = if (currentBase == "pipeline") android.view.View.VISIBLE
         else android.view.View.GONE
 
@@ -240,18 +224,9 @@ class MainActivity : AppCompatActivity() {
         val activeColor   = ContextCompat.getColor(this, R.color.colorPrimary)
         val inactiveColor = ContextCompat.getColor(this, R.color.colorTextMuted)
 
-        listOf(R.id.btnRaw, R.id.btnBC, R.id.btnPipeline).forEach { id ->
+        listOf(R.id.btnBC, R.id.btnPipeline).forEach { id ->
             val btn = findViewById<MaterialButton>(id)
             val sel = baseModeGroup.checkedButtonId == id
-            btn.setTextColor(if (sel) activeColor else inactiveColor)
-            btn.strokeColor = if (sel)
-                ContextCompat.getColorStateList(this, R.color.colorPrimary)
-            else
-                ContextCompat.getColorStateList(this, R.color.colorDivider)
-        }
-        listOf(R.id.btnNone, R.id.btnYolo).forEach { id ->
-            val btn = findViewById<MaterialButton>(id)
-            val sel = overlayModeGroup.checkedButtonId == id
             btn.setTextColor(if (sel) activeColor else inactiveColor)
             btn.strokeColor = if (sel)
                 ContextCompat.getColorStateList(this, R.color.colorPrimary)
@@ -326,11 +301,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         try {
-            if (currentBase == "raw" && currentOverlay == "none") {
-                mainHandler.post { detectionOverlay.clear() }
-                updateFps(); proxy.close(); processing.set(false); return
-            }
-
             val rotationDegrees = proxy.imageInfo.rotationDegrees
             val rgbaMat = imageProxyToRgbaMat(proxy)
             
@@ -361,42 +331,27 @@ class MainActivity : AppCompatActivity() {
             val sourceW = result.cols()
             val sourceH = result.rows()
 
-            if (currentOverlay == "yolo") {
-                val boxes = frameProcessor.yolo.lastBoxes
-                val outBitmap = ImageProcessor.matToBitmap(result)
-                
-                // Only release if it's a new Mat from processor, not our persistent buffers
-                if (result !== frame && result !== rawFrame && result !== rotatedFrameCached) {
-                    result.release()
-                }
-
-                mainHandler.post {
-                    detectionOverlay.setDetections(
-                        boxes, sourceW, sourceH,
-                        BoxCoordinateMapper.ScaleType.FIT_CENTER
-                    )
-                    processedView.setImageBitmap(outBitmap)
-                    truckConfidenceText.text = buildTruckConfidenceLabel()
-                    updateFps()
-                    when {
-                        frameProcessor.yolo.lastTargetDetection != null -> setStatus("Truck/bus detected", StatusLevel.OK)
-                        else -> setStatus("No truck/bus detected", StatusLevel.WARN)
-                    }
-                }
-                return
-            }
-
+            val boxes = frameProcessor.yolo.lastBoxes
             val outBitmap = ImageProcessor.matToBitmap(result)
+            
+            // Only release if it's a new Mat from processor, not our persistent buffers
             if (result !== frame && result !== rawFrame && result !== rotatedFrameCached) {
                 result.release()
             }
 
             mainHandler.post {
-                detectionOverlay.setDetections(emptyList(), 1, 1, BoxCoordinateMapper.ScaleType.FIT_CENTER)
+                detectionOverlay.setDetections(
+                    boxes, sourceW, sourceH,
+                    BoxCoordinateMapper.ScaleType.FIT_CENTER
+                )
                 processedView.setImageBitmap(outBitmap)
+                truckConfidenceText.text = buildTruckConfidenceLabel()
                 updateFps()
+                when {
+                    frameProcessor.yolo.lastTargetDetection != null -> setStatus("Truck/bus detected", StatusLevel.OK)
+                    else -> setStatus("No truck/bus detected", StatusLevel.WARN)
+                }
             }
-
         } catch (e: Exception) {
             mainHandler.post { setStatus("Error: ${e.message}", StatusLevel.ERROR) }
         } finally {
