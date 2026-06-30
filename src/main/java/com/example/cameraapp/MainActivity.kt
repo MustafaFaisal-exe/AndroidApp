@@ -5,10 +5,12 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
@@ -46,18 +48,48 @@ class MainActivity : AppCompatActivity() {
     private lateinit var brightnessValueText: TextView
     private lateinit var contrastValueText: TextView
     private lateinit var truckConfidenceText: TextView
+    private lateinit var loadStatusBadge: TextView
+    private lateinit var heatmapView: ImageView
+    private lateinit var debugMetricsText: TextView
+    private lateinit var stabilityProgressText: TextView
+    private lateinit var analyzingOverlay: android.view.View
+    private lateinit var retryButton: MaterialButton
 
     // ─── State ───────────────────────────────────────────────────────
+    enum class CaptureState { SCANNING, STABILIZING, ANALYZING, RESULT }
+    private var currentState = CaptureState.SCANNING
+
     private var currentBase    = "bc"
     private var currentOverlay = "yolo"
     private val processing     = AtomicBoolean(false)
+    private var totalFrameCount = 0
+    private var lastAnalysis: TruckAnalysisResult? = null
+    private var lastBoxes: List<DetectionOverlay.Box> = emptyList()
+    private var lastSourceW = 0
+    private var lastSourceH = 0
+
+    // Configurable parameters
+    private var marginLeft = 80
+    private var marginRight = 80
+    private var marginTop = 80
+    private var marginBottom = 80
+    private var meanThreshold = 160f
 
     // ─── Camera / processing ─────────────────────────────────────────
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var frameProcessor: FrameProcessor
+    private lateinit var depthEstimator: DepthEstimator
+    private lateinit var analyzer: TruckLoadAnalyzer
+    private lateinit var stabilityTracker: StabilityTracker
     private var cameraProvider: ProcessCameraProvider? = null
     private var imageAnalysis: ImageAnalysis? = null
     private var camera: Camera? = null
+
+    private val backCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            resetScanning()
+        }
+    }
 
     // Persistent buffers to avoid GC pressure
     private var rgbaMatCached: Mat? = null
@@ -91,6 +123,12 @@ class MainActivity : AppCompatActivity() {
         
         cameraExecutor = Executors.newSingleThreadExecutor()
         frameProcessor = FrameProcessor(this)
+        depthEstimator = DepthEstimator(this)
+        analyzer = TruckLoadAnalyzer(this, frameProcessor.yolo, depthEstimator)
+        stabilityTracker = StabilityTracker()
+        
+        onBackPressedDispatcher.addCallback(this, backCallback)
+        retryButton.setOnClickListener { resetScanning() }
         
         setupModeToggles()
 
@@ -101,6 +139,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
         frameProcessor.close()
+        depthEstimator.close()
         rgbaMatCached?.release()
         rawFrameCached?.release()
         rotatedFrameCached?.release()
@@ -127,6 +166,12 @@ class MainActivity : AppCompatActivity() {
         brightnessValueText = findViewById(R.id.brightnessValue)
         contrastValueText   = findViewById(R.id.contrastValue)
         truckConfidenceText = findViewById(R.id.truckConfidenceText)
+        loadStatusBadge     = findViewById(R.id.loadStatusBadge)
+        heatmapView         = findViewById(R.id.heatmapView)
+        debugMetricsText    = findViewById(R.id.debugMetricsText)
+        stabilityProgressText = findViewById(R.id.stabilityProgressText)
+        analyzingOverlay    = findViewById(R.id.analyzingOverlay)
+        retryButton         = findViewById(R.id.retryButton)
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -199,8 +244,24 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-        } else {
-            setStatus("Mode: $mode", StatusLevel.OK)
+        }
+        
+        if (!depthEstimator.isReady() && depthEstimator.status != DepthEstimator.Status.LOADING) {
+            if (depthEstimator.status == DepthEstimator.Status.ERROR) {
+                setStatus("Depth Model Error: ${depthEstimator.errorMessage}", StatusLevel.ERROR)
+            } else {
+                setStatus("Loading Depth Model…", StatusLevel.WARN)
+                depthEstimator.loadAsync {
+                    mainHandler.post {
+                        if (depthEstimator.isReady()) {
+                            setStatus("Models Ready ✓", StatusLevel.OK)
+                        } else {
+                            setStatus("Depth Init Failed", StatusLevel.ERROR)
+                            Log.e("MainActivity", "Depth Error: ${depthEstimator.errorMessage}")
+                        }
+                    }
+                }
+            }
         }
 
         previewView.visibility = android.view.View.VISIBLE
@@ -300,6 +361,12 @@ class MainActivity : AppCompatActivity() {
             proxy.close(); return
         }
 
+        if (currentState == CaptureState.RESULT || currentState == CaptureState.ANALYZING) {
+            proxy.close()
+            processing.set(false)
+            return
+        }
+
         try {
             val rotationDegrees = proxy.imageInfo.rotationDegrees
             val rgbaMat = imageProxyToRgbaMat(proxy)
@@ -308,6 +375,8 @@ class MainActivity : AppCompatActivity() {
                 ?: Mat(rgbaMat.rows(), rgbaMat.cols(), CvType.CV_8UC3).also { rawFrameCached = it }
                 
             Imgproc.cvtColor(rgbaMat, rawFrame, Imgproc.COLOR_RGBA2BGR)
+
+            totalFrameCount++
 
             val frame = if (rotationDegrees != 0) {
                 val rotated = rotatedFrameCached?.let { 
@@ -327,16 +396,50 @@ class MainActivity : AppCompatActivity() {
                 rotated
             } else rawFrame
 
-            val result = frameProcessor.process(frame, currentBase, currentOverlay)
-            val sourceW = result.cols()
-            val sourceH = result.rows()
+            val resultMat = frameProcessor.process(frame, currentBase, currentOverlay)
+            val sourceW = resultMat.cols()
+            val sourceH = resultMat.rows()
+
+            // YOLO continues running every frame
+            frameProcessor.yolo.infer(resultMat)
+            val target = frameProcessor.yolo.lastTargetDetection
+            
+            if (target != null) {
+                stabilityTracker.addDetection(
+                    StabilityTracker.DetectionEntry(
+                        target.conf,
+                        android.graphics.RectF(target.x1, target.y1, target.x2, target.y2),
+                        target.classId
+                    )
+                )
+                if (currentState == CaptureState.SCANNING) {
+                    updateUiForState(CaptureState.STABILIZING)
+                }
+            } else {
+                stabilityTracker.addDetection(null)
+                if (currentState == CaptureState.STABILIZING && stabilityTracker.getProgress() == 0) {
+                    updateUiForState(CaptureState.SCANNING)
+                }
+            }
+
+            if (currentState == CaptureState.STABILIZING) {
+                val progress = stabilityTracker.getProgress()
+                val max = stabilityTracker.getMaxProgress()
+                mainHandler.post {
+                    stabilityProgressText.text = "Hold steady... $progress/$max"
+                }
+                
+                if (stabilityTracker.isStable()) {
+                    triggerCapture(resultMat)
+                }
+            }
 
             val boxes = frameProcessor.yolo.lastBoxes
-            val outBitmap = ImageProcessor.matToBitmap(result)
+            val outBitmap = ImageProcessor.matToBitmap(resultMat)
             
             // Only release if it's a new Mat from processor, not our persistent buffers
-            if (result !== frame && result !== rawFrame && result !== rotatedFrameCached) {
-                result.release()
+            if (resultMat !== frame && resultMat !== rawFrame && resultMat !== rotatedFrameCached) {
+                resultMat.release()
             }
 
             mainHandler.post {
@@ -344,13 +447,11 @@ class MainActivity : AppCompatActivity() {
                     boxes, sourceW, sourceH,
                     BoxCoordinateMapper.ScaleType.FIT_CENTER
                 )
-                processedView.setImageBitmap(outBitmap)
+                if (currentState != CaptureState.RESULT && currentState != CaptureState.ANALYZING) {
+                    processedView.setImageBitmap(outBitmap)
+                }
                 truckConfidenceText.text = buildTruckConfidenceLabel()
                 updateFps()
-                when {
-                    frameProcessor.yolo.lastTargetDetection != null -> setStatus("Truck/bus detected", StatusLevel.OK)
-                    else -> setStatus("No truck/bus detected", StatusLevel.WARN)
-                }
             }
         } catch (e: Exception) {
             mainHandler.post { setStatus("Error: ${e.message}", StatusLevel.ERROR) }
@@ -359,6 +460,139 @@ class MainActivity : AppCompatActivity() {
             processing.set(false)
         }
     }
+
+    private fun triggerCapture(frame: Mat) {
+        if (currentState == CaptureState.ANALYZING || currentState == CaptureState.RESULT) return
+        
+        lastSourceW = frame.cols()
+        lastSourceH = frame.rows()
+        
+        updateUiForState(CaptureState.ANALYZING)
+        
+        // Freeze frame
+        val frozenBitmap = ImageProcessor.matToBitmap(frame)
+        val frameCopy = frame.clone()
+
+        mainHandler.post {
+            processedView.setImageBitmap(frozenBitmap)
+            processedView.visibility = android.view.View.VISIBLE
+        }
+
+        Thread {
+            try {
+                val analysis = analyzer.analyze(
+                    frameCopy,
+                    marginLeft, marginRight, marginTop, marginBottom,
+                    meanThreshold
+                )
+                lastAnalysis = analysis
+
+                lastBoxes = if (analysis.source == "yolo") {
+                    frameProcessor.yolo.lastBoxes
+                } else {
+                    listOf(
+                        DetectionOverlay.Box(
+                            analysis.cropRect.left.toFloat(),
+                            analysis.cropRect.top.toFloat(),
+                            analysis.cropRect.right.toFloat(),
+                            analysis.cropRect.bottom.toFloat(),
+                            "FALLBACK",
+                            android.graphics.Color.YELLOW,
+                            4f
+                        )
+                    )
+                }
+                
+                mainHandler.post {
+                    displayAnalysisResult(analysis)
+                    updateUiForState(CaptureState.RESULT)
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Analysis failed", e)
+                mainHandler.post {
+                    setStatus("Analysis failed: ${e.message}", StatusLevel.ERROR)
+                    resetScanning()
+                }
+            } finally {
+                frameCopy.release()
+            }
+        }.start()
+    }
+
+    private fun resetScanning() {
+        stabilityTracker.reset()
+        lastAnalysis = null
+        lastBoxes = emptyList()
+        updateUiForState(CaptureState.SCANNING)
+    }
+
+    private fun updateUiForState(state: CaptureState) {
+        currentState = state
+        mainHandler.post {
+            when (state) {
+                CaptureState.SCANNING -> {
+                    stabilityProgressText.visibility = android.view.View.GONE
+                    analyzingOverlay.visibility = android.view.View.GONE
+                    retryButton.visibility = android.view.View.GONE
+                    loadStatusBadge.text = "SCANNING"
+                    loadStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.DKGRAY)
+                    heatmapView.setImageBitmap(null)
+                    processedView.visibility = android.view.View.VISIBLE
+                    detectionOverlay.visibility = android.view.View.VISIBLE
+                    backCallback.isEnabled = false
+                }
+                CaptureState.STABILIZING -> {
+                    stabilityProgressText.visibility = android.view.View.VISIBLE
+                    analyzingOverlay.visibility = android.view.View.GONE
+                    retryButton.visibility = android.view.View.GONE
+                    backCallback.isEnabled = false
+                }
+                CaptureState.ANALYZING -> {
+                    stabilityProgressText.visibility = android.view.View.GONE
+                    analyzingOverlay.visibility = android.view.View.VISIBLE
+                    retryButton.visibility = android.view.View.GONE
+                    backCallback.isEnabled = false
+                }
+                CaptureState.RESULT -> {
+                    stabilityProgressText.visibility = android.view.View.GONE
+                    analyzingOverlay.visibility = android.view.View.GONE
+                    retryButton.visibility = android.view.View.VISIBLE
+                    processedView.visibility = android.view.View.VISIBLE
+                    detectionOverlay.visibility = android.view.View.VISIBLE
+                    backCallback.isEnabled = true
+                }
+            }
+        }
+    }
+
+    private fun displayAnalysisResult(analysis: TruckAnalysisResult) {
+        loadStatusBadge.text = analysis.status
+        loadStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            when {
+                analysis.status.contains("ERROR") -> android.graphics.Color.DKGRAY
+                analysis.isFull -> android.graphics.Color.GREEN
+                else -> android.graphics.Color.RED
+            }
+        )
+        heatmapView.setImageBitmap(analysis.depthMapBitmap)
+        debugMetricsText.text = "Mean: %.1f Std: %.1f Src: %s".format(
+            analysis.depthMean, analysis.depthStd, analysis.source
+        )
+
+        detectionOverlay.setDetections(
+            lastBoxes, lastSourceW, lastSourceH,
+            BoxCoordinateMapper.ScaleType.FIT_CENTER
+        )
+
+        if (depthEstimator.status != DepthEstimator.Status.ERROR && 
+            frameProcessor.yolo.status != YoloDetector.Status.ERROR) {
+            when {
+                analysis.source == "yolo" -> setStatus("Detected via YOLO", StatusLevel.OK)
+                else -> setStatus("Detected via center-crop fallback", StatusLevel.WARN)
+            }
+        }
+    }
+
 
     private fun buildTruckConfidenceLabel(): String {
         val conf = frameProcessor.yolo.lastTargetConfidence ?: return ""

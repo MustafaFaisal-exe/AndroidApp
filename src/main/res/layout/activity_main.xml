@@ -83,11 +83,28 @@
             android:id="@+id/modeBadge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="raw+none"
+            android:text="bc+yolo"
             android:textColor="@color/colorPrimary"
             android:textSize="11sp"
             android:fontFamily="monospace"
             android:background="@drawable/badge_bg"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:layout_marginEnd="12dp" />
+
+        <!-- Load Status Badge -->
+        <TextView
+            android:id="@+id/loadStatusBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="UNKNOWN"
+            android:textColor="@android:color/white"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:background="@drawable/badge_bg"
+            android:backgroundTint="@color/colorTextMuted"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
             android:paddingTop="3dp"
@@ -123,6 +140,58 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/stabilityProgressText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/badge_bg"
+        android:backgroundTint="#80000000"
+        android:fontFamily="monospace"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:text="Hold steady... 0/10"
+        android:textColor="@color/colorAccent"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/truckConfidenceText"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Analyzing Overlay -->
+    <LinearLayout
+        android:id="@+id/analyzingOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/badge_bg"
+        android:backgroundTint="#CC000000"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ProgressBar
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:indeterminateTint="@color/colorPrimary"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Analyzing..."
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <!-- ═══════════════════════════════════════════════════════════
          BOTTOM CONTROL PANEL
@@ -328,17 +397,54 @@
                 android:background="@drawable/dot_status"
                 android:layout_marginEnd="8dp" />
 
-            <TextView
-                android:id="@+id/statusText"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Ready"
-                android:textColor="@color/colorTextMuted"
-                android:textSize="11sp"
-                android:fontFamily="monospace"
-                android:layout_weight="1" />
+                android:orientation="vertical"
+                android:layout_weight="1">
+
+                <TextView
+                    android:id="@+id/statusText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Ready"
+                    android:textColor="@color/colorTextMuted"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace" />
+
+                <TextView
+                    android:id="@+id/debugMetricsText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="@color/colorTextMuted"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/heatmapView"
+                android:layout_width="80dp"
+                android:layout_height="60dp"
+                android:background="@color/colorBg"
+                android:scaleType="fitCenter"
+                android:layout_marginStart="8dp" />
 
         </LinearLayout>
+
+        <!-- Retry Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/retryButton"
+            style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:layout_marginTop="16dp"
+            android:text="RETRY / SCAN AGAIN"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:cornerRadius="8dp"
+            android:visibility="gone"
+            android:backgroundTint="@color/colorRear" />
 
     </LinearLayout>
 

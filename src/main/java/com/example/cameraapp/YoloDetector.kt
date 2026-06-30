@@ -88,12 +88,12 @@ class YoloDetector(private val context: Context) {
                 inputSize = resolveInputSize(session!!)
                 status = Status.READY
                 Log.i(TAG, "ONNX session ready (inputSize=$inputSize)")
-                onReady()
             } catch (e: Exception) {
                 status = Status.ERROR
                 errorMessage = "${e.javaClass.simpleName}: ${e.message ?: "Unknown error"}"
                 Log.e(TAG, "Failed to load ONNX model", e)
             }
+            onReady()
         }.start()
     }
 
@@ -139,10 +139,10 @@ class YoloDetector(private val context: Context) {
 
         if (kept.isEmpty()) return
 
-        val truckBus = kept.filter { it.classId == BUS_CLASS_ID || it.classId == TRUCK_CLASS_ID }
-        val bestTruckBus = selectBestTruckBus(truckBus) ?: return
+        val trucks = kept.filter { it.classId == TRUCK_CLASS_ID }
+        val bestTruck = selectBestTruck(trucks) ?: return
 
-        val cropBox = tightenForCrop(bestTruckBus, frame.cols(), frame.rows())
+        val cropBox = tightenForCrop(bestTruck, frame.cols(), frame.rows())
         val x1 = cropBox.x1.roundToInt().coerceIn(0, frame.cols() - 1)
         val y1 = cropBox.y1.roundToInt().coerceIn(0, frame.rows() - 1)
         val x2 = cropBox.x2.roundToInt().coerceIn(x1 + 1, frame.cols())
@@ -159,14 +159,14 @@ class YoloDetector(private val context: Context) {
         val bestView = cachedView
 
         lastTruckView          = cachedView
-        lastTargetClassId      = bestTruckBus.classId
-        lastTargetConfidence   = bestTruckBus.conf
-        lastTargetDetection    = bestTruckBus
+        lastTargetClassId      = bestTruck.classId
+        lastTargetConfidence   = bestTruck.conf
+        lastTargetDetection    = bestTruck
 
-        // Display only the best truck/bus box
-        val label = buildTruckLabel(bestTruckBus, bestView)
+        // Display only the best truck box
+        val label = buildTruckLabel(bestTruck, bestView)
         val color = viewColorForTruck(bestView)
-        val tight = tightenForDisplay(bestTruckBus)
+        val tight = tightenForDisplay(bestTruck)
         
         lastBoxes = listOf(
             DetectionOverlay.Box(tight.x1, tight.y1, tight.x2, tight.y2, label, color, 6f)
@@ -256,8 +256,11 @@ class YoloDetector(private val context: Context) {
         return Detection(x1, y1, x2, y2, d.conf, d.classId)
     }
 
-    private fun selectBestTruckBus(detections: List<Detection>): Detection? {
-        return detections.maxByOrNull { it.conf }
+    private fun selectBestTruck(detections: List<Detection>): Detection? {
+        return detections.maxByOrNull { 
+            val area = (it.x2 - it.x1) * (it.y2 - it.y1)
+            it.conf * 1000f + area 
+        }
     }
 
     private fun nms(detections: List<Detection>): List<Detection> {

@@ -34,7 +34,7 @@ class FrameProcessor(context: Context) {
     }
 
     private fun applyOverlay(frame: Mat, overlay: String): Mat {
-        if (overlay == "yolo") yolo.infer(frame)
+        // YOLO and Depth are now handled by TruckLoadAnalyzer every 10 frames
         return frame
     }
 
