@@ -73,7 +73,8 @@ class MainActivity : AppCompatActivity() {
     private var marginRight = 80
     private var marginTop = 80
     private var marginBottom = 80
-    private var meanThreshold = 120f
+    private var rearMeanThreshold = 162f
+    private var sideStdThreshold = 70f
 
     // ─── Camera / processing ─────────────────────────────────────────
     private lateinit var cameraExecutor: ExecutorService
@@ -483,7 +484,7 @@ class MainActivity : AppCompatActivity() {
                 val analysis = analyzer.analyze(
                     frameCopy,
                     marginLeft, marginRight, marginTop, marginBottom,
-                    meanThreshold
+                    rearMeanThreshold, sideStdThreshold
                 )
                 lastAnalysis = analysis
 

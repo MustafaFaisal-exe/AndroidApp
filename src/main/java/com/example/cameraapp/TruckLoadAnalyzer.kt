@@ -25,14 +25,6 @@ class TruckLoadAnalyzer(
             val y2 = (h - marginBottom).coerceIn(y1 + 1, h)
             return Rect(x1, y1, x2, y2)
         }
-
-        /**
-         * Logic: if mean depth is high (more yellow), it's full.
-         * If mean depth is low (more blue), it's empty.
-         */
-        fun classifyLoad(depthMean: Float, threshold: Float): Boolean {
-            return depthMean > threshold
-        }
     }
 
     fun analyze(
@@ -41,11 +33,13 @@ class TruckLoadAnalyzer(
         marginRight: Int,
         marginTop: Int,
         marginBottom: Int,
-        depthThreshold: Float
+        rearMeanThreshold: Float,
+        sideStdThreshold: Float
     ): TruckAnalysisResult {
         // 1. Try YOLO
         yolo.infer(frame)
         val yoloTarget = yolo.lastTargetDetection
+        val truckView = yolo.lastTruckView
         
         val cropRect: Rect
         val source: String
@@ -72,9 +66,14 @@ class TruckLoadAnalyzer(
             }
         }
 
-        // 2. Run Depth Estimation on the WHOLE frame
-        val fullBitmap = ImageProcessor.matToBitmap(frame)
-        val depthResult = depthEstimator.estimate(fullBitmap) ?: run {
+        // 2. Crop Mat and convert to Bitmap for Depth model
+        val roi = org.opencv.core.Rect(cropRect.left, cropRect.top, cropRect.width(), cropRect.height())
+        val croppedMat = Mat(frame, roi)
+        val croppedBitmap = ImageProcessor.matToBitmap(croppedMat)
+        croppedMat.release()
+        
+        // 3. Depth Estimation on the CROPPED image
+        val depthResult = depthEstimator.estimate(croppedBitmap) ?: run {
             val statusMsg = when (depthEstimator.status) {
                 DepthEstimator.Status.ERROR -> "Depth Model ERROR"
                 DepthEstimator.Status.LOADING -> "Depth Loading..."
@@ -83,27 +82,28 @@ class TruckLoadAnalyzer(
             return TruckAnalysisResult(statusMsg, false, 0f, 0f, 0f, cropRect, source, null)
         }
         
-        // 3. Crop Depth Map using YOLO box
-        val regionResult = depthEstimator.cropDepthMap(
-            depthResult,
-            cropRect,
-            frame.cols(),
-            frame.rows()
-        )
-        
-        // 4. Classification based on regional mean
-        val isFull = classifyLoad(regionResult.mean, depthThreshold)
-        val status = if (isFull) "FULL" else "EMPTY"
+        // 4. Classification based on view
+        val isFull = when (truckView) {
+            TruckView.REAR -> depthResult.depthMean > rearMeanThreshold
+            TruckView.SIDE -> depthResult.depthStd < sideStdThreshold
+            else -> null // Uncertain
+        }
+
+        val status = when (isFull) {
+            true -> "FULL"
+            false -> "EMPTY"
+            null -> "UNCERTAIN"
+        }
         
         return TruckAnalysisResult(
             status = status,
-            isFull = isFull,
-            depthMean = regionResult.mean,
-            depthDiff = regionResult.diff,
-            depthStd = regionResult.std,
+            isFull = isFull ?: false,
+            depthMean = depthResult.depthMean,
+            depthDiff = depthResult.depthDiff,
+            depthStd = depthResult.depthStd,
             cropRect = cropRect,
             source = source,
-            depthMapBitmap = regionResult.heatmap
+            depthMapBitmap = depthResult.heatmap
         )
     }
 }
