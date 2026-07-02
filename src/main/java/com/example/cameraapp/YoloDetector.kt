@@ -13,6 +13,7 @@ import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import java.io.File
+import java.io.FileOutputStream
 import java.nio.FloatBuffer
 import kotlin.math.roundToInt
 
@@ -47,10 +48,6 @@ class YoloDetector(private val context: Context) {
 
     var lastTruckView: TruckView? = null
         private set
-    var lastCropWidth: Int = 0
-        private set
-    var lastCropHeight: Int = 0
-        private set
     var lastTargetClassId: Int? = null
         private set
     var lastTargetConfidence: Float? = null
@@ -78,13 +75,13 @@ class YoloDetector(private val context: Context) {
         status = Status.LOADING
         Thread {
             try {
-                val modelBytes = loadModelBytes()
+                val modelPath = getModelPath()
                 env = OrtEnvironment.getEnvironment()
                 val opts = OrtSession.SessionOptions().apply {
                     setIntraOpNumThreads(2)
                     setOptimizationLevel(OrtSession.SessionOptions.OptLevel.BASIC_OPT)
                 }
-                session = env!!.createSession(modelBytes, opts)
+                session = env!!.createSession(modelPath, opts)
                 inputSize = resolveInputSize(session!!)
                 status = Status.READY
                 Log.i(TAG, "ONNX session ready (inputSize=$inputSize)")
@@ -130,8 +127,6 @@ class YoloDetector(private val context: Context) {
         
         frameCounter++
         lastTruckView = null
-        lastCropWidth = 0
-        lastCropHeight = 0
         lastTargetClassId = null
         lastTargetConfidence = null
         lastTargetDetection = null
@@ -147,8 +142,6 @@ class YoloDetector(private val context: Context) {
         val y1 = cropBox.y1.roundToInt().coerceIn(0, frame.rows() - 1)
         val x2 = cropBox.x2.roundToInt().coerceIn(x1 + 1, frame.cols())
         val y2 = cropBox.y2.roundToInt().coerceIn(y1 + 1, frame.rows())
-        lastCropWidth = x2 - x1
-        lastCropHeight = y2 - y1
 
         if (frameCounter % CLASSIFY_EVERY_N == 0) {
             val roi  = org.opencv.core.Rect(x1, y1, x2 - x1, y2 - y1)
@@ -202,11 +195,6 @@ class YoloDetector(private val context: Context) {
         return Detection(x1, y1, x2, y2, d.conf, d.classId)
     }
 
-    fun lastTargetCrop(frameWidth: Int, frameHeight: Int): Detection? {
-        val target = lastTargetDetection ?: return null
-        return tightenForCrop(target, frameWidth, frameHeight)
-    }
-
     private fun shrinkBox(
         d: Detection,
         factor: Float,
@@ -244,13 +232,6 @@ class YoloDetector(private val context: Context) {
             val midY = (y1 + y2) / 2f
             y1 = midY - 1f
             y2 = midY + 1f
-        }
-
-        if (imageWidth != null && imageHeight != null) {
-            x1 = x1.coerceIn(0f, imageWidth.toFloat())
-            y1 = y1.coerceIn(0f, imageHeight.toFloat())
-            x2 = x2.coerceIn(0f, imageWidth.toFloat())
-            y2 = y2.coerceIn(0f, imageHeight.toFloat())
         }
 
         return Detection(x1, y1, x2, y2, d.conf, d.classId)
@@ -445,6 +426,18 @@ class YoloDetector(private val context: Context) {
         return mapOf(inputName to tensor)
     }
 
+    private fun getModelPath(): String {
+        val f = File(context.filesDir, MODEL_FILE)
+        if (!f.exists()) {
+            context.assets.open(MODEL_FILE).use { input ->
+                FileOutputStream(f).use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }
+        return f.absolutePath
+    }
+
     data class Detection(
         val x1: Float,
         val y1: Float,
@@ -452,9 +445,7 @@ class YoloDetector(private val context: Context) {
         val y2: Float,
         val conf: Float,
         val classId: Int
-    ) {
-        fun scale(factor: Float) = Detection(x1 * factor, y1 * factor, x2 * factor, y2 * factor, conf, classId)
-    }
+    )
 
     private fun fallback(frame: Mat) {
         lastBoxes = emptyList()
@@ -480,16 +471,6 @@ class YoloDetector(private val context: Context) {
         } catch (e: Exception) {
             Log.w(TAG, "Falling back to default input size", e)
             DEFAULT_INPUT_SIZE
-        }
-    }
-
-    private fun loadModelBytes(): ByteArray {
-        return try {
-            context.assets.open(MODEL_FILE).readBytes()
-        } catch (e: Exception) {
-            val f = File(context.filesDir, MODEL_FILE)
-            if (f.exists()) f.readBytes()
-            else throw Exception("Place $MODEL_FILE in app/src/main/assets/ and rebuild")
         }
     }
 }

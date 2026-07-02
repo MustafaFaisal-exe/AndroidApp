@@ -1,13 +1,12 @@
 package com.example.cameraapp
 
-import android.content.Context
 import android.graphics.Rect
 import org.opencv.core.Mat
 
 class TruckLoadAnalyzer(
-    private val context: Context,
     private val yolo: YoloDetector,
-    private val depthEstimator: DepthEstimator
+    private val depthEstimator: DepthEstimator,
+    private val classifier: TruckClassifier
 ) {
 
     companion object {
@@ -32,20 +31,16 @@ class TruckLoadAnalyzer(
         marginLeft: Int,
         marginRight: Int,
         marginTop: Int,
-        marginBottom: Int,
-        rearMeanThreshold: Float,
-        sideStdThreshold: Float
+        marginBottom: Int
     ): TruckAnalysisResult {
         // 1. Try YOLO
         yolo.infer(frame)
         val yoloTarget = yolo.lastTargetDetection
-        val truckView = yolo.lastTruckView
         
         val cropRect: Rect
         val source: String
         
         if (yoloTarget != null) {
-            // YOLO detected something
             cropRect = Rect(
                 yoloTarget.x1.toInt().coerceIn(0, frame.cols()),
                 yoloTarget.y1.toInt().coerceIn(0, frame.rows()),
@@ -54,7 +49,6 @@ class TruckLoadAnalyzer(
             )
             source = "yolo"
         } else {
-            // Fallback to center crop
             cropRect = calculateFallbackCrop(
                 frame.cols(), frame.rows(),
                 marginLeft, marginRight, marginTop, marginBottom
@@ -74,30 +68,16 @@ class TruckLoadAnalyzer(
         
         // 3. Depth Estimation on the CROPPED image
         val depthResult = depthEstimator.estimate(croppedBitmap) ?: run {
-            val statusMsg = when (depthEstimator.status) {
-                DepthEstimator.Status.ERROR -> "Depth Model ERROR"
-                DepthEstimator.Status.LOADING -> "Depth Loading..."
-                else -> "Depth Not Ready"
-            }
-            return TruckAnalysisResult(statusMsg, false, 0f, 0f, 0f, cropRect, source, null)
+            return TruckAnalysisResult("Depth Error", false, 0f, 0f, 0f, cropRect, source, null)
         }
         
-        // 4. Classification based on view
-        val isFull = when (truckView) {
-            TruckView.REAR -> depthResult.depthMean > rearMeanThreshold
-            TruckView.SIDE -> depthResult.depthStd < sideStdThreshold
-            else -> null // Uncertain
-        }
-
-        val status = when (isFull) {
-            true -> "FULL"
-            false -> "EMPTY"
-            null -> "UNCERTAIN"
-        }
+        // 4. Classification using the ML model
+        val features = classifier.extractFeatures(depthResult.depthMap, depthResult.rows, depthResult.cols)
+        val prediction = classifier.predict(features)
         
         return TruckAnalysisResult(
-            status = status,
-            isFull = isFull ?: false,
+            status = prediction,
+            isFull = prediction == "FULL",
             depthMean = depthResult.depthMean,
             depthDiff = depthResult.depthDiff,
             depthStd = depthResult.depthStd,

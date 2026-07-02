@@ -73,13 +73,12 @@ class MainActivity : AppCompatActivity() {
     private var marginRight = 80
     private var marginTop = 80
     private var marginBottom = 80
-    private var rearMeanThreshold = 162f
-    private var sideStdThreshold = 70f
 
     // ─── Camera / processing ─────────────────────────────────────────
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var frameProcessor: FrameProcessor
     private lateinit var depthEstimator: DepthEstimator
+    private lateinit var truckClassifier: TruckClassifier
     private lateinit var analyzer: TruckLoadAnalyzer
     private lateinit var stabilityTracker: StabilityTracker
     private var cameraProvider: ProcessCameraProvider? = null
@@ -125,7 +124,8 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor = Executors.newSingleThreadExecutor()
         frameProcessor = FrameProcessor(this)
         depthEstimator = DepthEstimator(this)
-        analyzer = TruckLoadAnalyzer(this, frameProcessor.yolo, depthEstimator)
+        truckClassifier = TruckClassifier(this)
+        analyzer = TruckLoadAnalyzer(frameProcessor.yolo, depthEstimator, truckClassifier)
         stabilityTracker = StabilityTracker()
         
         onBackPressedDispatcher.addCallback(this, backCallback)
@@ -141,6 +141,7 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor.shutdown()
         frameProcessor.close()
         depthEstimator.close()
+        truckClassifier.close()
         rgbaMatCached?.release()
         rawFrameCached?.release()
         rotatedFrameCached?.release()
@@ -255,10 +256,25 @@ class MainActivity : AppCompatActivity() {
                 depthEstimator.loadAsync {
                     mainHandler.post {
                         if (depthEstimator.isReady()) {
-                            setStatus("Models Ready ✓", StatusLevel.OK)
+                            setStatus("Depth Model Ready ✓", StatusLevel.OK)
                         } else {
                             setStatus("Depth Init Failed", StatusLevel.ERROR)
-                            Log.e("MainActivity", "Depth Error: ${depthEstimator.errorMessage}")
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!truckClassifier.isReady() && truckClassifier.status != TruckClassifier.Status.LOADING) {
+            if (truckClassifier.status == TruckClassifier.Status.ERROR) {
+                setStatus("Classifier Error: ${truckClassifier.errorMessage}", StatusLevel.ERROR)
+            } else {
+                truckClassifier.loadAsync {
+                    mainHandler.post {
+                        if (truckClassifier.isReady()) {
+                            setStatus("Classifier Ready ✓", StatusLevel.OK)
+                        } else {
+                            setStatus("Classifier Init Failed", StatusLevel.ERROR)
                         }
                     }
                 }
@@ -483,8 +499,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val analysis = analyzer.analyze(
                     frameCopy,
-                    marginLeft, marginRight, marginTop, marginBottom,
-                    rearMeanThreshold, sideStdThreshold
+                    marginLeft, marginRight, marginTop, marginBottom
                 )
                 lastAnalysis = analysis
 
