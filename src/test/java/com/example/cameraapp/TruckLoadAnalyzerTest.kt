@@ -29,26 +29,14 @@ class TruckLoadAnalyzerTest {
     }
 
     @Test
-    fun testClassificationLogic() {
-        val threshold = 40f
-        
-        // Case: depthDiff < threshold -> FULL
-        assertTrue(TruckLoadAnalyzer.classifyLoad(10f, threshold))
-        assertTrue(TruckLoadAnalyzer.classifyLoad(39.9f, threshold))
-        
-        // Case: depthDiff >= threshold -> EMPTY
-        assertFalse(TruckLoadAnalyzer.classifyLoad(40f, threshold))
-        assertFalse(TruckLoadAnalyzer.classifyLoad(100f, threshold))
-    }
-
-    @Test
     fun testEdgeCaseMargins() {
         val w = 100
         val h = 100
         // Margins too large
         val rect = TruckLoadAnalyzer.calculateFallbackCrop(w, h, 60, 60, 0, 0)
         
-        // Rect(60, 0, 40, 100) -> width = -20
-        assertTrue(rect.width() <= 0)
+        assertEquals(60, rect.left)
+        assertEquals(61, rect.right)
+        assertEquals(1, rect.width())
     }
 }

@@ -218,7 +218,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="14dp" />
 
-        <!-- ─── BASE MODE ROW ─── -->
+        <!-- ─── TASK MODE ROW ─── -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -227,7 +227,7 @@
             android:layout_marginBottom="10dp">
 
             <TextView
-                android:text="BASE"
+                android:text="TASK"
                 android:textColor="@color/colorTextMuted"
                 android:textSize="10sp"
                 android:fontFamily="monospace"
@@ -236,7 +236,7 @@
                 android:layout_height="wrap_content" />
 
             <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/baseModeGroup"
+                android:id="@+id/taskModeGroup"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -244,23 +244,34 @@
                 app:selectionRequired="true">
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnBC"
+                    android:id="@+id/btnNight"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_height="38dp"
                     android:layout_weight="1"
-                    android:text="BC"
+                    android:text="Night"
                     android:textSize="12sp"
                     android:textColor="@color/colorText"
                     app:strokeColor="@color/colorDivider" />
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnPipeline"
+                    android:id="@+id/btnFront"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_height="38dp"
                     android:layout_weight="1"
-                    android:text="Pipeline"
+                    android:text="Front"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorText"
+                    app:strokeColor="@color/colorDivider" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnFullEmpty"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="Full"
                     android:textSize="12sp"
                     android:textColor="@color/colorText"
                     app:strokeColor="@color/colorDivider" />

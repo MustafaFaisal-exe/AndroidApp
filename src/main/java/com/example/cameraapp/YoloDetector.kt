@@ -28,12 +28,6 @@ class YoloDetector(private val context: Context) {
         private const val TRUCK_CLASS_ID = 7
         private const val BUS_CLASS_ID = 5
         private const val CLASSIFY_EVERY_N = 4
-        private const val TARGET_BOX_SHRINK = 0.92f
-        private const val MIN_BOX_SHRINK = 0.88f
-        private const val MAX_BOX_SHRINK = 0.99f
-        private const val CONFIDENCE_SHRINK_WEIGHT = 0.06f
-        private const val SMALL_BOX_SIDE_THRESHOLD = 120f
-        private const val SMALL_BOX_SHRINK_BONUS = 0.02f
 
         private const val TRUCK_LABEL = "truck"
         private const val BUS_LABEL = "bus"
@@ -107,7 +101,7 @@ class YoloDetector(private val context: Context) {
         status = Status.IDLE
     }
 
-    fun infer(frame: Mat) {
+    fun infer(frame: Mat, includeView: Boolean = true) {
         val currentSession = session ?: run {
             fallback(frame)
             return
@@ -137,32 +131,32 @@ class YoloDetector(private val context: Context) {
         val trucks = kept.filter { it.classId == TRUCK_CLASS_ID }
         val bestTruck = selectBestTruck(trucks) ?: return
 
-        val cropBox = tightenForCrop(bestTruck, frame.cols(), frame.rows())
-        val x1 = cropBox.x1.roundToInt().coerceIn(0, frame.cols() - 1)
-        val y1 = cropBox.y1.roundToInt().coerceIn(0, frame.rows() - 1)
-        val x2 = cropBox.x2.roundToInt().coerceIn(x1 + 1, frame.cols())
-        val y2 = cropBox.y2.roundToInt().coerceIn(y1 + 1, frame.rows())
+        val x1 = bestTruck.x1.roundToInt().coerceIn(0, frame.cols() - 1)
+        val y1 = bestTruck.y1.roundToInt().coerceIn(0, frame.rows() - 1)
+        val x2 = bestTruck.x2.roundToInt().coerceIn(x1 + 1, frame.cols())
+        val y2 = bestTruck.y2.roundToInt().coerceIn(y1 + 1, frame.rows())
 
-        if (frameCounter % CLASSIFY_EVERY_N == 0) {
-            val roi  = org.opencv.core.Rect(x1, y1, x2 - x1, y2 - y1)
-            val crop = Mat(frame, roi)
-            cachedView = FrontDetector.IsFront(crop)
-            crop.release()
-        }
-        val bestView = cachedView
+        val bestView = if (includeView) {
+            if (frameCounter % CLASSIFY_EVERY_N == 0) {
+                val roi  = org.opencv.core.Rect(x1, y1, x2 - x1, y2 - y1)
+                val crop = Mat(frame, roi)
+                cachedView = FrontDetector.IsFront(crop)
+                crop.release()
+            }
+            cachedView
+        } else null
 
-        lastTruckView          = cachedView
+        lastTruckView          = bestView
         lastTargetClassId      = bestTruck.classId
         lastTargetConfidence   = bestTruck.conf
         lastTargetDetection    = bestTruck
 
-        // Display only the best truck box
+        // Display only the best truck box, using the original YOLO coordinates.
         val label = buildTruckLabel(bestTruck, bestView)
-        val color = viewColorForTruck(bestView)
-        val tight = tightenForDisplay(bestTruck)
-        
+        val color = bestView?.let { viewColorForTruck(it) } ?: Color.GREEN
+
         lastBoxes = listOf(
-            DetectionOverlay.Box(tight.x1, tight.y1, tight.x2, tight.y2, label, color, 6f)
+            DetectionOverlay.Box(bestTruck.x1, bestTruck.y1, bestTruck.x2, bestTruck.y2, label, color, 6f)
         )
     }
 
@@ -172,69 +166,16 @@ class YoloDetector(private val context: Context) {
         TruckView.SIDE -> Color.rgb(255, 165, 0)
     }
 
-    private fun buildTruckLabel(d: Detection, view: TruckView): String {
+    private fun buildTruckLabel(d: Detection, view: TruckView?): String {
         val name = if (d.classId == BUS_CLASS_ID) BUS_LABEL else TRUCK_LABEL
         val conf = "${"%.0f".format(d.conf * 100)}%"
         val v = when (view) {
             TruckView.FRONT -> "FRONT"
             TruckView.REAR -> "REAR"
             TruckView.SIDE -> "SIDE"
+            null -> null
         }
-        return "$name $conf → $v"
-    }
-
-    private fun tightenForDisplay(d: Detection): Detection {
-        return shrinkBox(d, TARGET_BOX_SHRINK.coerceIn(MIN_BOX_SHRINK, MAX_BOX_SHRINK), null, null)
-    }
-
-    private fun tightenForCrop(d: Detection, imageWidth: Int, imageHeight: Int): Detection {
-        val x1 = d.x1.coerceIn(0f, imageWidth.toFloat())
-        val y1 = d.y1.coerceIn(0f, imageHeight.toFloat())
-        val x2 = d.x2.coerceIn(0f, imageWidth.toFloat())
-        val y2 = d.y2.coerceIn(0f, imageHeight.toFloat())
-        return Detection(x1, y1, x2, y2, d.conf, d.classId)
-    }
-
-    private fun shrinkBox(
-        d: Detection,
-        factor: Float,
-        imageWidth: Int?,
-        imageHeight: Int?
-    ): Detection {
-        val width = (d.x2 - d.x1).coerceAtLeast(1f)
-        val height = (d.y2 - d.y1).coerceAtLeast(1f)
-        val confidenceTrim = (1f - d.conf).coerceIn(0f, 1f) * CONFIDENCE_SHRINK_WEIGHT
-        val smallBoxTrim = if (maxOf(width, height) < SMALL_BOX_SIDE_THRESHOLD) SMALL_BOX_SHRINK_BONUS else 0f
-        val effectiveFactor = (factor - confidenceTrim - smallBoxTrim).coerceIn(MIN_BOX_SHRINK, MAX_BOX_SHRINK)
-        val cx = (d.x1 + d.x2) / 2f
-        val cy = (d.y1 + d.y2) / 2f
-        val halfW = width * effectiveFactor / 2f
-        val halfH = height * effectiveFactor / 2f
-
-        var x1 = cx - halfW
-        var y1 = cy - halfH
-        var x2 = cx + halfW
-        var y2 = cy + halfH
-
-        if (imageWidth != null && imageHeight != null) {
-            x1 = x1.coerceIn(0f, imageWidth.toFloat())
-            y1 = y1.coerceIn(0f, imageHeight.toFloat())
-            x2 = x2.coerceIn(0f, imageWidth.toFloat())
-            y2 = y2.coerceIn(0f, imageHeight.toFloat())
-        }
-
-        if (x2 - x1 < 2f) {
-            val midX = (x1 + x2) / 2f
-            x1 = midX - 1f
-            x2 = midX + 1f
-        }
-        if (y2 - y1 < 2f) {
-            val midY = (y1 + y2) / 2f
-            y1 = midY - 1f
-            y2 = midY + 1f
-        }
-
-        return Detection(x1, y1, x2, y2, d.conf, d.classId)
+        return if (v == null) "$name $conf" else "$name $conf -> $v"
     }
 
     private fun selectBestTruck(detections: List<Detection>): Detection? {

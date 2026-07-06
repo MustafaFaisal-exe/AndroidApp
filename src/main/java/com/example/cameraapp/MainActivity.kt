@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fpsText: TextView
     private lateinit var statusText: TextView
     private lateinit var statusDot: android.view.View
-    private lateinit var baseModeGroup: MaterialButtonToggleGroup
+    private lateinit var taskModeGroup: MaterialButtonToggleGroup
     private lateinit var denoiseRow: android.view.View
     private lateinit var brightnessRow: android.view.View
     private lateinit var contrastRow: android.view.View
@@ -57,9 +57,12 @@ class MainActivity : AppCompatActivity() {
 
     // ─── State ───────────────────────────────────────────────────────
     enum class CaptureState { SCANNING, STABILIZING, ANALYZING, RESULT }
-    private var currentState = CaptureState.SCANNING
+    enum class DetectionTask { NIGHT, FRONT_REAR_SIDE, FULL_EMPTY }
 
-    private var currentBase    = "bc"
+    private var currentState = CaptureState.SCANNING
+    private var currentTask = DetectionTask.NIGHT
+
+    private var currentBase    = "pipeline"
     private var currentOverlay = "yolo"
     private val processing     = AtomicBoolean(false)
     private var totalFrameCount = 0
@@ -159,7 +162,7 @@ class MainActivity : AppCompatActivity() {
         fpsText          = findViewById(R.id.fpsText)
         statusText       = findViewById(R.id.statusText)
         statusDot        = findViewById(R.id.statusDot)
-        baseModeGroup    = findViewById(R.id.baseModeGroup)
+        taskModeGroup    = findViewById(R.id.taskModeGroup)
         denoiseRow       = findViewById(R.id.denoiseRow)
         brightnessRow    = findViewById(R.id.brightnessRow)
         contrastRow      = findViewById(R.id.contrastRow)
@@ -181,14 +184,16 @@ class MainActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────
 
     private fun setupModeToggles() {
-        baseModeGroup.check(R.id.btnBC)
+        taskModeGroup.check(R.id.btnNight)
 
-        baseModeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+        taskModeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
-            currentBase = when (checkedId) {
-                R.id.btnPipeline -> "pipeline"
-                else             -> "bc"
+            currentTask = when (checkedId) {
+                R.id.btnFront -> DetectionTask.FRONT_REAR_SIDE
+                R.id.btnFullEmpty -> DetectionTask.FULL_EMPTY
+                else -> DetectionTask.NIGHT
             }
+            resetScanning()
             onModeChanged()
         }
 
@@ -231,8 +236,27 @@ class MainActivity : AppCompatActivity() {
         slider.addOnChangeListener { _, value, _ -> onChanged(value) }
     }
 
+    private fun baseForCurrentTask(): String = when (currentTask) {
+        DetectionTask.NIGHT -> "pipeline"
+        DetectionTask.FRONT_REAR_SIDE,
+        DetectionTask.FULL_EMPTY -> "bc"
+    }
+
+    private fun taskLabel(): String = when (currentTask) {
+        DetectionTask.NIGHT -> "night+yolo"
+        DetectionTask.FRONT_REAR_SIDE -> "front+yolo"
+        DetectionTask.FULL_EMPTY -> "full+yolo"
+    }
+
+    private fun scanningBadgeText(): String = when (currentTask) {
+        DetectionTask.NIGHT -> "NIGHT"
+        DetectionTask.FRONT_REAR_SIDE -> "FRONT"
+        DetectionTask.FULL_EMPTY -> "SCANNING"
+    }
+
     private fun onModeChanged() {
-        val mode = "$currentBase+$currentOverlay"
+        currentBase = baseForCurrentTask()
+        val mode = taskLabel()
         modeBadge.text = mode
 
         if (!frameProcessor.yolo.isReady()) {
@@ -248,7 +272,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         
-        if (!depthEstimator.isReady() && depthEstimator.status != DepthEstimator.Status.LOADING) {
+        if (currentTask == DetectionTask.FULL_EMPTY && !depthEstimator.isReady() && depthEstimator.status != DepthEstimator.Status.LOADING) {
             if (depthEstimator.status == DepthEstimator.Status.ERROR) {
                 setStatus("Depth Model Error: ${depthEstimator.errorMessage}", StatusLevel.ERROR)
             } else {
@@ -265,7 +289,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        if (!truckClassifier.isReady() && truckClassifier.status != TruckClassifier.Status.LOADING) {
+        if (currentTask == DetectionTask.FULL_EMPTY && !truckClassifier.isReady() && truckClassifier.status != TruckClassifier.Status.LOADING) {
             if (truckClassifier.status == TruckClassifier.Status.ERROR) {
                 setStatus("Classifier Error: ${truckClassifier.errorMessage}", StatusLevel.ERROR)
             } else {
@@ -287,10 +311,10 @@ class MainActivity : AppCompatActivity() {
         processedView.setBackgroundColor(android.graphics.Color.BLACK)
         detectionOverlay.visibility = android.view.View.VISIBLE
         
-        denoiseRow.visibility = if (currentBase == "pipeline") android.view.View.VISIBLE
+        denoiseRow.visibility = if (currentTask == DetectionTask.NIGHT) android.view.View.VISIBLE
         else android.view.View.GONE
 
-        val showSliders = (currentBase == "bc")
+        val showSliders = currentTask != DetectionTask.NIGHT
         brightnessRow.visibility = if (showSliders) android.view.View.VISIBLE else android.view.View.GONE
         contrastRow.visibility   = if (showSliders) android.view.View.VISIBLE else android.view.View.GONE
 
@@ -302,9 +326,9 @@ class MainActivity : AppCompatActivity() {
         val activeColor   = ContextCompat.getColor(this, R.color.colorPrimary)
         val inactiveColor = ContextCompat.getColor(this, R.color.colorTextMuted)
 
-        listOf(R.id.btnBC, R.id.btnPipeline).forEach { id ->
+        listOf(R.id.btnNight, R.id.btnFront, R.id.btnFullEmpty).forEach { id ->
             val btn = findViewById<MaterialButton>(id)
-            val sel = baseModeGroup.checkedButtonId == id
+            val sel = taskModeGroup.checkedButtonId == id
             btn.setTextColor(if (sel) activeColor else inactiveColor)
             btn.strokeColor = if (sel)
                 ContextCompat.getColorStateList(this, R.color.colorPrimary)
@@ -394,6 +418,7 @@ class MainActivity : AppCompatActivity() {
             Imgproc.cvtColor(rgbaMat, rawFrame, Imgproc.COLOR_RGBA2BGR)
 
             totalFrameCount++
+            val shouldRunInference = (totalFrameCount % 4 == 0)
 
             val frame = if (rotationDegrees != 0) {
                 val rotated = rotatedFrameCached?.let { 
@@ -417,29 +442,33 @@ class MainActivity : AppCompatActivity() {
             val sourceW = resultMat.cols()
             val sourceH = resultMat.rows()
 
-            // YOLO continues running every frame
-            frameProcessor.yolo.infer(resultMat)
-            val target = frameProcessor.yolo.lastTargetDetection
-            
-            if (target != null) {
-                stabilityTracker.addDetection(
-                    StabilityTracker.DetectionEntry(
-                        target.conf,
-                        android.graphics.RectF(target.x1, target.y1, target.x2, target.y2),
-                        target.classId
-                    )
-                )
-                if (currentState == CaptureState.SCANNING) {
-                    updateUiForState(CaptureState.STABILIZING)
-                }
-            } else {
-                stabilityTracker.addDetection(null)
-                if (currentState == CaptureState.STABILIZING && stabilityTracker.getProgress() == 0) {
-                    updateUiForState(CaptureState.SCANNING)
+            if (shouldRunInference) {
+                // YOLO runs for every task; front/rear/side classification is task-specific.
+                frameProcessor.yolo.infer(resultMat, includeView = currentTask == DetectionTask.FRONT_REAR_SIDE)
+                val target = frameProcessor.yolo.lastTargetDetection
+
+                if (currentTask == DetectionTask.FULL_EMPTY) {
+                    if (target != null) {
+                        stabilityTracker.addDetection(
+                            StabilityTracker.DetectionEntry(
+                                target.conf,
+                                android.graphics.RectF(target.x1, target.y1, target.x2, target.y2),
+                                target.classId
+                            )
+                        )
+                        if (currentState == CaptureState.SCANNING) {
+                            updateUiForState(CaptureState.STABILIZING)
+                        }
+                    } else {
+                        stabilityTracker.addDetection(null)
+                        if (currentState == CaptureState.STABILIZING && stabilityTracker.getProgress() == 0) {
+                            updateUiForState(CaptureState.SCANNING)
+                        }
+                    }
                 }
             }
 
-            if (currentState == CaptureState.STABILIZING) {
+            if (currentTask == DetectionTask.FULL_EMPTY && currentState == CaptureState.STABILIZING) {
                 val progress = stabilityTracker.getProgress()
                 val max = stabilityTracker.getMaxProgress()
                 mainHandler.post {
@@ -550,7 +579,7 @@ class MainActivity : AppCompatActivity() {
                     stabilityProgressText.visibility = android.view.View.GONE
                     analyzingOverlay.visibility = android.view.View.GONE
                     retryButton.visibility = android.view.View.GONE
-                    loadStatusBadge.text = "SCANNING"
+                    loadStatusBadge.text = scanningBadgeText()
                     loadStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.DKGRAY)
                     heatmapView.setImageBitmap(null)
                     processedView.visibility = android.view.View.VISIBLE
@@ -617,12 +646,14 @@ class MainActivity : AppCompatActivity() {
         val name = when (classId) {
             5 -> "BUS"; 7 -> "TRUCK"; else -> "VEHICLE"
         }
-        val viewStr = when (view) {
-            TruckView.FRONT -> " (FRONT)"
-            TruckView.REAR -> " (REAR)"
-            TruckView.SIDE -> " (SIDE)"
-            else -> ""
-        }
+        val viewStr = if (currentTask == DetectionTask.FRONT_REAR_SIDE) {
+            when (view) {
+                TruckView.FRONT -> " (FRONT)"
+                TruckView.REAR -> " (REAR)"
+                TruckView.SIDE -> " (SIDE)"
+                else -> ""
+            }
+        } else ""
         return "$name ${"%.0f".format(conf * 100)}%$viewStr"
     }
 

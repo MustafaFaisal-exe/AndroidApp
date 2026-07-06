@@ -34,7 +34,7 @@ class TruckLoadAnalyzer(
         marginBottom: Int
     ): TruckAnalysisResult {
         // 1. Try YOLO
-        yolo.infer(frame)
+        yolo.infer(frame, includeView = false)
         val yoloTarget = yolo.lastTargetDetection
         
         val cropRect: Rect
