@@ -271,7 +271,61 @@
                     android:layout_width="0dp"
                     android:layout_height="38dp"
                     android:layout_weight="1"
-                    android:text="Full"
+                    android:text="Empty Detection"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorText"
+                    android:textAllCaps="false"
+                    android:padding="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:strokeColor="@color/colorDivider" />
+
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+        </LinearLayout>
+
+        <!-- ─── YOLO TOGGLE ROW ─── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:text="YOLO"
+                android:textColor="@color/colorTextMuted"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15"
+                android:layout_width="64dp"
+                android:layout_height="wrap_content" />
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/yoloToggleGroup"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnYoloOn"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="ON"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorText"
+                    app:strokeColor="@color/colorDivider" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnYoloOff"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="OFF"
                     android:textSize="12sp"
                     android:textColor="@color/colorText"
                     app:strokeColor="@color/colorDivider" />
@@ -305,92 +359,6 @@
                 android:fontFamily="monospace"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <!-- ─── BRIGHTNESS SLIDER ─── -->
-        <LinearLayout
-            android:id="@+id/brightnessRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone">
-
-            <TextView
-                android:text="BRIGHT"
-                android:textColor="@color/colorTextMuted"
-                android:textSize="10sp"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.15"
-                android:layout_width="64dp"
-                android:layout_height="wrap_content" />
-
-            <com.google.android.material.slider.Slider
-                android:id="@+id/brightnessSlider"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:valueFrom="-10.0"
-                android:valueTo="10.0"
-                android:stepSize="1.0"
-                android:value="0.0"
-                app:labelBehavior="gone"
-                app:thumbRadius="8dp"
-                app:trackHeight="4dp" />
-
-            <TextView
-                android:id="@+id/brightnessValue"
-                android:text="0"
-                android:textColor="@color/colorText"
-                android:textSize="11sp"
-                android:fontFamily="monospace"
-                android:layout_width="32dp"
-                android:layout_height="wrap_content"
-                android:gravity="end" />
-        </LinearLayout>
-
-        <!-- ─── CONTRAST SLIDER ─── -->
-        <LinearLayout
-            android:id="@+id/contrastRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="14dp"
-            android:visibility="gone">
-
-            <TextView
-                android:text="CONTRAST"
-                android:textColor="@color/colorTextMuted"
-                android:textSize="10sp"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.15"
-                android:layout_width="64dp"
-                android:layout_height="wrap_content" />
-
-            <com.google.android.material.slider.Slider
-                android:id="@+id/contrastSlider"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:valueFrom="1.0"
-                android:valueTo="2.0"
-                android:stepSize="0.1"
-                android:value="1.0"
-                app:labelBehavior="gone"
-                app:thumbRadius="8dp"
-                app:trackHeight="4dp" />
-
-            <TextView
-                android:id="@+id/contrastValue"
-                android:text="1.0"
-                android:textColor="@color/colorText"
-                android:textSize="11sp"
-                android:fontFamily="monospace"
-                android:layout_width="32dp"
-                android:layout_height="wrap_content"
-                android:gravity="end" />
         </LinearLayout>
 
         <!-- ─── STATUS BAR ─── -->

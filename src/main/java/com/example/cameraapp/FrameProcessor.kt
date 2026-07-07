@@ -6,8 +6,6 @@ import org.opencv.core.Mat
 class FrameProcessor(context: Context) {
 
     val yolo = YoloDetector(context)
-    var brightness: Int = 0
-    var contrast: Double = 1.0
 
     companion object {
         val VALID_BASES = setOf("bc", "pipeline")
@@ -30,7 +28,7 @@ class FrameProcessor(context: Context) {
 
     private fun applyBase(frame: Mat, base: String): Mat = when (base) {
         "pipeline" -> ImageProcessor.preprocess(frame)
-        else -> ImageProcessor.preprocessBC(frame, brightness = brightness, contrast = contrast)
+        else -> ImageProcessor.preprocessBC(frame)
     }
 
     private fun applyOverlay(frame: Mat, overlay: String): Mat {

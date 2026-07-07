@@ -19,7 +19,6 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
-import com.google.android.material.slider.Slider
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.Core
 import org.opencv.core.CvType
@@ -40,13 +39,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var statusDot: android.view.View
     private lateinit var taskModeGroup: MaterialButtonToggleGroup
+    private lateinit var yoloToggleGroup: MaterialButtonToggleGroup
     private lateinit var denoiseRow: android.view.View
-    private lateinit var brightnessRow: android.view.View
-    private lateinit var contrastRow: android.view.View
-    private lateinit var brightnessSlider: Slider
-    private lateinit var contrastSlider: Slider
-    private lateinit var brightnessValueText: TextView
-    private lateinit var contrastValueText: TextView
     private lateinit var truckConfidenceText: TextView
     private lateinit var loadStatusBadge: TextView
     private lateinit var heatmapView: ImageView
@@ -61,6 +55,7 @@ class MainActivity : AppCompatActivity() {
 
     private var currentState = CaptureState.SCANNING
     private var currentTask = DetectionTask.NIGHT
+    private var isYoloEnabled = true
 
     private var currentBase    = "pipeline"
     private var currentOverlay = "yolo"
@@ -163,13 +158,8 @@ class MainActivity : AppCompatActivity() {
         statusText       = findViewById(R.id.statusText)
         statusDot        = findViewById(R.id.statusDot)
         taskModeGroup    = findViewById(R.id.taskModeGroup)
+        yoloToggleGroup  = findViewById(R.id.yoloToggleGroup)
         denoiseRow       = findViewById(R.id.denoiseRow)
-        brightnessRow    = findViewById(R.id.brightnessRow)
-        contrastRow      = findViewById(R.id.contrastRow)
-        brightnessSlider = findViewById(R.id.brightnessSlider)
-        contrastSlider   = findViewById(R.id.contrastSlider)
-        brightnessValueText = findViewById(R.id.brightnessValue)
-        contrastValueText   = findViewById(R.id.contrastValue)
         truckConfidenceText = findViewById(R.id.truckConfidenceText)
         loadStatusBadge     = findViewById(R.id.loadStatusBadge)
         heatmapView         = findViewById(R.id.heatmapView)
@@ -185,6 +175,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupModeToggles() {
         taskModeGroup.check(R.id.btnNight)
+        yoloToggleGroup.check(R.id.btnYoloOn)
 
         taskModeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
@@ -197,19 +188,13 @@ class MainActivity : AppCompatActivity() {
             onModeChanged()
         }
 
-        setupSliders()
-        onModeChanged() // Initialize state
-    }
+        yoloToggleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            isYoloEnabled = checkedId == R.id.btnYoloOn
+            onModeChanged()
+        }
 
-    private fun setupSliders() {
-        configureSlider(brightnessSlider, -10f, 10f, 1f, 0f) { value ->
-            frameProcessor.brightness = value.toInt()
-            brightnessValueText.text = value.toInt().toString()
-        }
-        configureSlider(contrastSlider, 0.0f, 5.0f, 0.1f, 1.0f) { value ->
-            frameProcessor.contrast = value.toDouble()
-            contrastValueText.text = "%.1f".format(value)
-        }
+        onModeChanged() // Initialize state
     }
 
     private fun updateExposure() {
@@ -221,31 +206,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun configureSlider(
-        slider: Slider,
-        min: Float,
-        max: Float,
-        step: Float,
-        initial: Float,
-        onChanged: (Float) -> Unit
-    ) {
-        slider.valueFrom = min
-        slider.valueTo = max
-        slider.stepSize = step
-        slider.value = initial
-        slider.addOnChangeListener { _, value, _ -> onChanged(value) }
-    }
-
     private fun baseForCurrentTask(): String = when (currentTask) {
         DetectionTask.NIGHT -> "pipeline"
         DetectionTask.FRONT_REAR_SIDE,
         DetectionTask.FULL_EMPTY -> "bc"
     }
 
-    private fun taskLabel(): String = when (currentTask) {
-        DetectionTask.NIGHT -> "night+yolo"
-        DetectionTask.FRONT_REAR_SIDE -> "front+yolo"
-        DetectionTask.FULL_EMPTY -> "full+yolo"
+    private fun taskLabel(): String {
+        val yoloStr = if (isYoloEnabled) "+yolo" else ""
+        return when (currentTask) {
+            DetectionTask.NIGHT -> "night$yoloStr"
+            DetectionTask.FRONT_REAR_SIDE -> "front$yoloStr"
+            DetectionTask.FULL_EMPTY -> "full$yoloStr"
+        }
     }
 
     private fun scanningBadgeText(): String = when (currentTask) {
@@ -259,7 +232,7 @@ class MainActivity : AppCompatActivity() {
         val mode = taskLabel()
         modeBadge.text = mode
 
-        if (!frameProcessor.yolo.isReady()) {
+        if (isYoloEnabled && !frameProcessor.yolo.isReady()) {
             setStatus("Loading YOLO…", StatusLevel.WARN)
             frameProcessor.yolo.loadAsync {
                 mainHandler.post {
@@ -314,10 +287,6 @@ class MainActivity : AppCompatActivity() {
         denoiseRow.visibility = if (currentTask == DetectionTask.NIGHT) android.view.View.VISIBLE
         else android.view.View.GONE
 
-        val showSliders = currentTask != DetectionTask.NIGHT
-        brightnessRow.visibility = if (showSliders) android.view.View.VISIBLE else android.view.View.GONE
-        contrastRow.visibility   = if (showSliders) android.view.View.VISIBLE else android.view.View.GONE
-
         updateExposure()
         highlightToggles()
     }
@@ -329,6 +298,16 @@ class MainActivity : AppCompatActivity() {
         listOf(R.id.btnNight, R.id.btnFront, R.id.btnFullEmpty).forEach { id ->
             val btn = findViewById<MaterialButton>(id)
             val sel = taskModeGroup.checkedButtonId == id
+            btn.setTextColor(if (sel) activeColor else inactiveColor)
+            btn.strokeColor = if (sel)
+                ContextCompat.getColorStateList(this, R.color.colorPrimary)
+            else
+                ContextCompat.getColorStateList(this, R.color.colorDivider)
+        }
+
+        listOf(R.id.btnYoloOn, R.id.btnYoloOff).forEach { id ->
+            val btn = findViewById<MaterialButton>(id)
+            val sel = yoloToggleGroup.checkedButtonId == id
             btn.setTextColor(if (sel) activeColor else inactiveColor)
             btn.strokeColor = if (sel)
                 ContextCompat.getColorStateList(this, R.color.colorPrimary)
@@ -438,11 +417,11 @@ class MainActivity : AppCompatActivity() {
                 rotated
             } else rawFrame
 
-            val resultMat = frameProcessor.process(frame, currentBase, currentOverlay)
+            val resultMat = frameProcessor.process(frame, currentBase, if (isYoloEnabled) currentOverlay else "none")
             val sourceW = resultMat.cols()
             val sourceH = resultMat.rows()
 
-            if (shouldRunInference) {
+            if (shouldRunInference && isYoloEnabled) {
                 // YOLO runs for every task; front/rear/side classification is task-specific.
                 frameProcessor.yolo.infer(resultMat, includeView = currentTask == DetectionTask.FRONT_REAR_SIDE)
                 val target = frameProcessor.yolo.lastTargetDetection
@@ -480,7 +459,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            val boxes = frameProcessor.yolo.lastBoxes
+            val boxes = if (isYoloEnabled) frameProcessor.yolo.lastBoxes else emptyList()
             val outBitmap = ImageProcessor.matToBitmap(resultMat)
             
             // Only release if it's a new Mat from processor, not our persistent buffers

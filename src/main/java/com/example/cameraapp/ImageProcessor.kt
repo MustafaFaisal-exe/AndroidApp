@@ -18,9 +18,9 @@ object ImageProcessor {
         }
     }
 
-    fun preprocessBC(frame: Mat, brightness: Int = 0, contrast: Double = 1.9): Mat {
+    fun preprocessBC(frame: Mat): Mat {
         val result = Mat()
-        frame.convertTo(result, -1, contrast, brightness.toDouble())
+        frame.copyTo(result)
         return result
     }
 
